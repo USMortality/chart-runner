@@ -1,0 +1,1 @@
+ALTER TABLE `job_runs` ADD `fix_explanation` text;

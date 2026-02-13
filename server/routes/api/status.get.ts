@@ -45,6 +45,7 @@ export default defineEventHandler(async (event) => {
     gists: {
       total: totalGists?.count || 0,
       active: activeGists?.count || 0,
+      disabled: (totalGists?.count || 0) - (activeGists?.count || 0),
     },
     jobs: {
       total: totalJobs?.count || 0,
@@ -54,5 +55,10 @@ export default defineEventHandler(async (event) => {
     },
     runningProcesses: getRunningProcesses().size,
     cronSchedule: process.env.CRON_SCHEDULE || "0 0 * * 0",
+    gistPrefix: process.env.GIST_PREFIX || "chart_",
+    githubUser: process.env.GITHUB_USER || "",
+    minioConfigured: !!(process.env.MINIO_ACCESS_KEY && process.env.MINIO_SECRET_KEY),
+    claudeConfigured: !!process.env.ANTHROPIC_API_KEY,
+    githubTokenConfigured: !!process.env.GITHUB_TOKEN,
   };
 });

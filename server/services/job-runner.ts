@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from "child_process";
 import { mkdtemp, writeFile, readdir, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
-import { eq } from "drizzle-orm";
+import { eq, and, ne } from "drizzle-orm";
 import { useDb, schema } from "../database";
 import { uploadPng, ensureBucket } from "./minio-upload";
 import { rebuildManifest } from "./charts-manifest";
@@ -81,7 +81,7 @@ export async function runJob(
     throw new Error(`Gist ${gistId} not found`);
   }
 
-  const chartName = gist.filename.replace(/\.R$/, "");
+  const chartName = gist.filename.replace(/\.[rR]$/, "");
   let attempt = 0;
   let lastError = "";
 
@@ -265,6 +265,12 @@ export function createJobRun(
   triggeredBy: "manual" | "scheduled"
 ): number {
   const db = useDb();
+
+  // Delete all previous runs for this gist
+  db.delete(schema.jobRuns)
+    .where(eq(schema.jobRuns.gistId, gistId))
+    .run();
+
   const result = db
     .insert(schema.jobRuns)
     .values({
@@ -275,4 +281,91 @@ export function createJobRun(
     .returning({ id: schema.jobRuns.id })
     .get();
   return result.id;
+}
+
+export async function runFixedJob(
+  jobId: number,
+  gist: { id: number; filename: string },
+  fixedScript: string,
+  explanation?: string
+): Promise<void> {
+  const db = useDb();
+  const chartName = gist.filename.replace(/\.[rR]$/, "");
+  const workDir = await mkdtemp(join(tmpdir(), "chart-runner-fix-"));
+
+  try {
+    db.update(schema.jobRuns)
+      .set({
+        status: "running",
+        startedAt: new Date().toISOString(),
+        outputLog: "[Claude-fixed script]\n",
+        fixedScript,
+        fixExplanation: explanation || null,
+      })
+      .where(eq(schema.jobRuns.id, jobId))
+      .run();
+
+    const scriptPath = join(workDir, gist.filename);
+    await writeFile(scriptPath, fixedScript);
+
+    const resultPromise = runRscript(scriptPath, workDir);
+    const proc = (runRscript as any).__lastProc as ChildProcess;
+    if (proc) runningProcesses.set(jobId, proc);
+
+    const result = await resultPromise;
+    runningProcesses.delete(jobId);
+
+    if (result.exitCode !== 0) {
+      db.update(schema.jobRuns)
+        .set({
+          status: "failed",
+          finishedAt: new Date().toISOString(),
+          errorLog: result.stderr,
+          outputLog: "[Claude-fixed script]\n" + result.stdout,
+        })
+        .where(eq(schema.jobRuns.id, jobId))
+        .run();
+      return;
+    }
+
+    const files = await readdir(workDir);
+    const pngFiles = files.filter((f) => f.endsWith(".png"));
+
+    const uploadedPaths: string[] = [];
+    try {
+      await ensureBucket();
+      for (const png of pngFiles) {
+        const objectName = await uploadPng(join(workDir, png), chartName);
+        uploadedPaths.push(objectName);
+      }
+    } catch {
+      // Upload failed, still mark success
+    }
+
+    db.update(schema.jobRuns)
+      .set({
+        status: "success",
+        finishedAt: new Date().toISOString(),
+        outputLog: "[Claude-fixed script]\n" + result.stdout,
+        pngFiles: JSON.stringify(uploadedPaths.length ? uploadedPaths : pngFiles),
+      })
+      .where(eq(schema.jobRuns.id, jobId))
+      .run();
+
+    try {
+      await rebuildManifest();
+    } catch {}
+  } catch (err: any) {
+    runningProcesses.delete(jobId);
+    db.update(schema.jobRuns)
+      .set({
+        status: "failed",
+        finishedAt: new Date().toISOString(),
+        errorLog: err.message,
+      })
+      .where(eq(schema.jobRuns.id, jobId))
+      .run();
+  } finally {
+    await rm(workDir, { recursive: true, force: true }).catch(() => {});
+  }
 }

@@ -1,0 +1,1 @@
+ALTER TABLE `job_runs` ADD `fixed_script` text;

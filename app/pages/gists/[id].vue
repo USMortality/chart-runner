@@ -1,4 +1,6 @@
 <script setup lang="ts">
+const toast = useToast();
+const { formatDate } = useFormatDate();
 const route = useRoute();
 const gistId = route.params.id;
 
@@ -15,16 +17,43 @@ const gistJobs = computed(() =>
   (jobsData.value?.jobs || []).filter((j: any) => j.gistId === Number(gistId))
 );
 
+const latestPngs = computed(() => {
+  const successJob = gistJobs.value.find((j: any) => j.status === "success" && j.pngFiles);
+  if (!successJob?.pngFiles) return [];
+  try { return JSON.parse(successJob.pngFiles); } catch { return []; }
+});
+
 const expandedLog = ref<number | null>(null);
+const fixing = ref<number | null>(null);
+const pushing = ref<number | null>(null);
+const togglingGist = ref(false);
 
 function toggleLog(id: number) {
   expandedLog.value = expandedLog.value === id ? null : id;
 }
 
+async function toggleGist() {
+  togglingGist.value = true;
+  try {
+    const result = await $fetch(`/api/gists/${gistId}/toggle`, { method: "POST" }) as any;
+    toast.add({ title: `${result.filename} ${result.action}`, color: "success" });
+    await refreshGists();
+  } catch (e: any) {
+    toast.add({ title: "Toggle failed", description: e?.data?.message || e.message, color: "error" });
+  } finally {
+    togglingGist.value = false;
+  }
+}
+
 async function runGist() {
-  await $fetch(`/api/gists/${gistId}/run`, { method: "POST" });
-  await refreshGists();
-  await refreshJobs();
+  try {
+    await $fetch(`/api/gists/${gistId}/run`, { method: "POST" });
+    toast.add({ title: "Job started", color: "success" });
+    await refreshGists();
+    await refreshJobs();
+  } catch (e: any) {
+    toast.add({ title: "Run failed", description: e?.data?.message || e.message, color: "error" });
+  }
 }
 
 async function cancelJob(id: number) {
@@ -32,11 +61,48 @@ async function cancelJob(id: number) {
   await refreshJobs();
 }
 
+async function fixJob(id: number) {
+  fixing.value = id;
+  try {
+    const result = await $fetch(`/api/jobs/${id}/fix`, { method: "POST" }) as any;
+    toast.add({
+      title: "Claude fix submitted",
+      description: result.explanation || `New job #${result.jobId} created`,
+      color: "success",
+    });
+    await refreshJobs();
+  } catch (e: any) {
+    toast.add({ title: "Fix failed", description: e?.data?.message || e.message, color: "error" });
+  } finally {
+    fixing.value = null;
+  }
+}
+
+async function pushFix(id: number) {
+  pushing.value = id;
+  try {
+    const result = await $fetch(`/api/jobs/${id}/push-fix`, { method: "POST" }) as any;
+    toast.add({
+      title: "Pushed to GitHub",
+      description: result.gistUrl,
+      color: "success",
+    });
+    await refreshJobs();
+  } catch (e: any) {
+    toast.add({ title: "Push failed", description: e?.data?.message || e.message, color: "error" });
+  } finally {
+    pushing.value = null;
+  }
+}
+
 // Auto-refresh
-const refreshInterval = setInterval(() => {
-  refreshGists();
-  refreshJobs();
-}, 10000);
+let refreshInterval: ReturnType<typeof setInterval>;
+onMounted(() => {
+  refreshInterval = setInterval(() => {
+    refreshGists();
+    refreshJobs();
+  }, 10000);
+});
 onUnmounted(() => clearInterval(refreshInterval));
 </script>
 
@@ -75,10 +141,32 @@ onUnmounted(() => clearInterval(refreshInterval));
         </div>
       </div>
       <template #footer>
-        <UButton @click="runGist" :disabled="gist.latestRun?.status === 'running'">
-          Run Now
-        </UButton>
+        <div class="flex gap-2">
+          <UButton @click="runGist" :disabled="gist.latestRun?.status === 'running' || !gist.active">
+            Run Now
+          </UButton>
+          <UButton
+            :color="gist.active ? 'warning' : 'success'"
+            variant="outline"
+            :loading="togglingGist"
+            @click="toggleGist"
+          >
+            {{ gist.active ? 'Disable' : 'Enable' }}
+          </UButton>
+        </div>
       </template>
+    </UCard>
+
+    <!-- Output PNGs from latest successful run -->
+    <UCard v-if="latestPngs.length > 0">
+      <template #header>
+        <h2 class="text-lg font-semibold">Output Files</h2>
+      </template>
+      <div class="flex flex-wrap gap-2">
+        <UBadge v-for="f in latestPngs" :key="f" variant="subtle" size="sm">
+          {{ f }}
+        </UBadge>
+      </div>
     </UCard>
 
     <!-- Run History -->
@@ -110,8 +198,8 @@ onUnmounted(() => clearInterval(refreshInterval));
               <td class="py-2 px-3"><StatusBadge :status="job.status" /></td>
               <td class="py-2 px-3 text-gray-500">{{ job.triggeredBy }}</td>
               <td class="py-2 px-3 text-gray-500">{{ job.retryCount }}</td>
-              <td class="py-2 px-3 text-gray-500">{{ job.startedAt || '-' }}</td>
-              <td class="py-2 px-3 text-gray-500">{{ job.finishedAt || '-' }}</td>
+              <td class="py-2 px-3 text-gray-500">{{ formatDate(job.startedAt) }}</td>
+              <td class="py-2 px-3 text-gray-500">{{ formatDate(job.finishedAt) }}</td>
               <td class="py-2 px-3 text-gray-500">
                 {{ job.pngFiles ? JSON.parse(job.pngFiles).length : 0 }}
               </td>
@@ -124,6 +212,26 @@ onUnmounted(() => clearInterval(refreshInterval));
                   @click="cancelJob(job.id)"
                 >
                   Cancel
+                </UButton>
+                <UButton
+                  v-if="job.status === 'failed'"
+                  size="xs"
+                  color="warning"
+                  variant="outline"
+                  :loading="fixing === job.id"
+                  @click="fixJob(job.id)"
+                >
+                  Fix with Claude
+                </UButton>
+                <UButton
+                  v-if="job.status === 'success' && job.hasFixedScript"
+                  size="xs"
+                  color="primary"
+                  variant="outline"
+                  :loading="pushing === job.id"
+                  @click="pushFix(job.id)"
+                >
+                  Push to Gist
                 </UButton>
                 <UButton size="xs" variant="ghost" @click="toggleLog(job.id)">
                   {{ expandedLog === job.id ? 'Hide' : 'Logs' }}
@@ -146,6 +254,10 @@ onUnmounted(() => clearInterval(refreshInterval));
         <template v-for="job in gistJobs" :key="'log-' + job.id">
           <div v-if="job.id === expandedLog">
             <h3 class="text-sm font-semibold mb-2">Job #{{ job.id }} Logs</h3>
+            <div v-if="job.fixExplanation" class="mb-2">
+              <div class="text-xs font-medium text-blue-600 mb-1">Claude's Fix:</div>
+              <pre class="bg-blue-50 dark:bg-blue-950 p-3 rounded text-xs overflow-auto max-h-64 whitespace-pre-wrap">{{ job.fixExplanation }}</pre>
+            </div>
             <div v-if="job.errorLog" class="mb-2">
               <div class="text-xs font-medium text-red-600 mb-1">Error:</div>
               <pre class="bg-red-50 dark:bg-red-950 p-3 rounded text-xs overflow-auto max-h-64">{{ job.errorLog }}</pre>
@@ -154,7 +266,7 @@ onUnmounted(() => clearInterval(refreshInterval));
               <div class="text-xs font-medium text-gray-600 mb-1">Output:</div>
               <pre class="bg-gray-100 dark:bg-gray-800 p-3 rounded text-xs overflow-auto max-h-64">{{ job.outputLog }}</pre>
             </div>
-            <div v-if="!job.errorLog && !job.outputLog" class="text-sm text-gray-500">
+            <div v-if="!job.errorLog && !job.outputLog && !job.hasFixedScript" class="text-sm text-gray-500">
               No logs available.
             </div>
           </div>

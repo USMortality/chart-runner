@@ -23,8 +23,11 @@ export default defineEventHandler(async (event) => {
       retryCount: schema.jobRuns.retryCount,
       triggeredBy: schema.jobRuns.triggeredBy,
       pngFiles: schema.jobRuns.pngFiles,
+      hasFixedScript: schema.jobRuns.fixedScript,
+      fixExplanation: schema.jobRuns.fixExplanation,
       createdAt: schema.jobRuns.createdAt,
       gistFilename: schema.gists.filename,
+      gistHtmlUrl: schema.gists.htmlUrl,
     })
     .from(schema.jobRuns)
     .leftJoin(schema.gists, eq(schema.jobRuns.gistId, schema.gists.id))

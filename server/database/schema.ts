@@ -36,6 +36,8 @@ export const jobRuns = sqliteTable("job_runs", {
     enum: ["manual", "scheduled"],
   }).notNull(),
   pngFiles: text("png_files").default("[]"),
+  fixedScript: text("fixed_script"),
+  fixExplanation: text("fix_explanation"),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),

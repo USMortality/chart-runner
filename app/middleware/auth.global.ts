@@ -1,22 +1,13 @@
 export default defineNuxtRouteMiddleware(async (to) => {
   if (to.path === "/login") return;
 
-  const { useSession } = useAuthClient();
-  const { data: session, isPending } = useSession();
+  // Skip auth check on server side
+  if (import.meta.server) return;
 
-  // Wait for session to load
-  if (isPending.value) {
-    await new Promise<void>((resolve) => {
-      const unwatch = watch(isPending, (val) => {
-        if (!val) {
-          unwatch();
-          resolve();
-        }
-      });
-    });
-  }
+  const client = useAuthClient();
+  const { data } = await client.getSession();
 
-  if (!session.value?.user) {
+  if (!data?.user) {
     return navigateTo("/login");
   }
 });

@@ -8,6 +8,20 @@
       "when": 1771004640665,
       "tag": "0000_normal_venom",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1771008915699,
+      "tag": "0001_mean_riptide",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1771011514646,
+      "tag": "0002_perpetual_skaar",
+      "breakpoints": true
     }
   ]
 }
