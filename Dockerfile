@@ -12,6 +12,9 @@ RUN apt-get update && apt-get install -y \
     && apt-get update && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
+# Install R packages
+RUN install.r tidyverse data.table jsonlite fable fabletools tsibble ggrepel gridExtra broom
+
 # Install Bun
 RUN curl -fsSL https://bun.sh/install | bash
 ENV PATH="/root/.bun/bin:${PATH}"

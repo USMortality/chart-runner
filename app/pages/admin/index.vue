@@ -9,6 +9,8 @@ const runningAll = ref(false);
 const rerunningFailed = ref(false);
 const toggling = ref<number | null>(null);
 
+const cancelling = ref<number | null>(null);
+
 const activeGists = computed(() => (gists.value || []).filter((g: any) => g.active));
 const disabledGists = computed(() => (gists.value || []).filter((g: any) => !g.active));
 
@@ -62,6 +64,20 @@ async function rerunFailed() {
     toast.add({ title: "Rerun failed", description: e?.data?.message || e.message, color: "error" });
   } finally {
     rerunningFailed.value = false;
+  }
+}
+
+async function cancelJob(jobId: number) {
+  cancelling.value = jobId;
+  try {
+    await $fetch(`/api/jobs/${jobId}/cancel`, { method: "POST" });
+    toast.add({ title: "Job cancelled", color: "success" });
+    await refreshGists();
+    await refreshStatus();
+  } catch (e: any) {
+    toast.add({ title: "Cancel failed", description: e?.data?.message || e.message, color: "error" });
+  } finally {
+    cancelling.value = null;
   }
 }
 
@@ -187,10 +203,20 @@ onUnmounted(() => clearInterval(refreshInterval));
               </td>
               <td class="py-2 px-3 space-x-1">
                 <UButton
+                  v-if="gist.latestRun?.status === 'running' || gist.latestRun?.status === 'pending'"
+                  size="xs"
+                  color="error"
+                  variant="outline"
+                  :loading="cancelling === gist.latestRun?.id"
+                  @click="cancelJob(gist.latestRun.id)"
+                >
+                  Stop
+                </UButton>
+                <UButton
+                  v-else
                   size="xs"
                   variant="outline"
                   @click="runGist(gist.id)"
-                  :disabled="gist.latestRun?.status === 'running'"
                 >
                   Run
                 </UButton>
