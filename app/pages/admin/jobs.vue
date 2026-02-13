@@ -102,7 +102,7 @@ onUnmounted(() => clearInterval(refreshInterval));
               <td class="py-2 px-3">
                 <NuxtLink
                   v-if="job.gistId"
-                  :to="`/gists/${job.gistId}`"
+                  :to="`/admin/gists/${job.gistId}`"
                   class="text-blue-600 hover:underline"
                 >
                   {{ job.gistFilename || `Gist #${job.gistId}` }}

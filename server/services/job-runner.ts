@@ -5,7 +5,6 @@ import { tmpdir } from "os";
 import { eq, and, ne } from "drizzle-orm";
 import { useDb, schema } from "../database";
 import { uploadPng, ensureBucket } from "./minio-upload";
-import { rebuildManifest } from "./charts-manifest";
 
 const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 2000;
@@ -193,15 +192,6 @@ export async function runJob(
         .where(eq(schema.jobRuns.id, jobId))
         .run();
 
-      // Rebuild manifest after successful job
-      try {
-        await rebuildManifest();
-      } catch (manifestErr: any) {
-        console.error(
-          `[job-runner] Manifest rebuild error: ${manifestErr.message}`
-        );
-      }
-
       await rm(workDir, { recursive: true, force: true });
       return;
     } catch (err: any) {
@@ -352,9 +342,6 @@ export async function runFixedJob(
       .where(eq(schema.jobRuns.id, jobId))
       .run();
 
-    try {
-      await rebuildManifest();
-    } catch {}
   } catch (err: any) {
     runningProcesses.delete(jobId);
     db.update(schema.jobRuns)

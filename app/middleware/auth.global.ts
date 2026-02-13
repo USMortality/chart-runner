@@ -1,5 +1,5 @@
 export default defineNuxtRouteMiddleware(async (to) => {
-  if (to.path === "/login") return;
+  if (!to.path.startsWith("/admin")) return;
 
   // Skip auth check on server side
   if (import.meta.server) return;

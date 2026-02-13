@@ -109,7 +109,7 @@ onUnmounted(() => clearInterval(refreshInterval));
 <template>
   <div class="space-y-6">
     <div class="flex items-center gap-4">
-      <UButton to="/" variant="ghost" size="sm">Back</UButton>
+      <UButton to="/admin" variant="ghost" size="sm">Back</UButton>
       <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
         {{ gist?.filename || `Gist #${gistId}` }}
       </h1>

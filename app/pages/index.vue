@@ -1,279 +1,160 @@
 <script setup lang="ts">
-const toast = useToast();
-const { formatDate } = useFormatDate();
-const { data: status, refresh: refreshStatus } = useFetch("/api/status");
-const { data: gists, refresh: refreshGists } = useFetch("/api/gists");
+definePageMeta({ layout: "public" });
 
-const syncing = ref(false);
-const runningAll = ref(false);
-const rerunningFailed = ref(false);
-const toggling = ref<number | null>(null);
+interface ChartEntry {
+  title: string;
+  url: string;
+  charts: string[];
+}
 
-const activeGists = computed(() => (gists.value || []).filter((g: any) => g.active));
-const disabledGists = computed(() => (gists.value || []).filter((g: any) => !g.active));
+const { data: chartsData } = useFetch<ChartEntry[]>("/api/charts");
 
-async function syncGists() {
-  syncing.value = true;
-  try {
-    const result = await $fetch("/api/gists/sync", { method: "POST" });
-    toast.add({ title: `Synced ${result.synced} chart gists`, color: "success" });
-    await refreshGists();
-    await refreshStatus();
-  } catch (e: any) {
-    toast.add({ title: "Sync failed", description: e?.data?.message || e.message, color: "error" });
-  } finally {
-    syncing.value = false;
+const expandedSections = ref<Set<string>>(new Set());
+const lightboxSrc = ref<string | null>(null);
+
+function sectionId(title: string) {
+  return title
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^\w-]+/g, "");
+}
+
+function toggleSection(id: string) {
+  if (expandedSections.value.has(id)) {
+    expandedSections.value.delete(id);
+  } else {
+    expandedSections.value.add(id);
+  }
+  // Trigger reactivity
+  expandedSections.value = new Set(expandedSections.value);
+}
+
+function toggleAll() {
+  if (!chartsData.value) return;
+  const allExpanded = expandedSections.value.size === chartsData.value.length;
+  if (allExpanded) {
+    expandedSections.value = new Set();
+  } else {
+    expandedSections.value = new Set(chartsData.value.map((e) => sectionId(e.title)));
   }
 }
 
-async function runAll() {
-  runningAll.value = true;
-  try {
-    const result = await $fetch("/api/jobs/run-all", { method: "POST" });
-    toast.add({ title: result.message, color: "success" });
-    await refreshGists();
-    await refreshStatus();
-  } catch (e: any) {
-    toast.add({ title: "Run all failed", description: e?.data?.message || e.message, color: "error" });
-  } finally {
-    runningAll.value = false;
-  }
-}
-
-async function runGist(id: number) {
-  try {
-    await $fetch(`/api/gists/${id}/run`, { method: "POST" });
-    toast.add({ title: "Job started", color: "success" });
-    await refreshGists();
-    await refreshStatus();
-  } catch (e: any) {
-    toast.add({ title: "Run failed", description: e?.data?.message || e.message, color: "error" });
-  }
-}
-
-async function rerunFailed() {
-  rerunningFailed.value = true;
-  try {
-    const result = await $fetch("/api/jobs/rerun-failed", { method: "POST" }) as any;
-    toast.add({ title: result.message, color: "success" });
-    await refreshGists();
-    await refreshStatus();
-  } catch (e: any) {
-    toast.add({ title: "Rerun failed", description: e?.data?.message || e.message, color: "error" });
-  } finally {
-    rerunningFailed.value = false;
-  }
-}
-
-async function toggleGist(id: number) {
-  toggling.value = id;
-  try {
-    const result = await $fetch(`/api/gists/${id}/toggle`, { method: "POST" }) as any;
-    toast.add({ title: `${result.filename} ${result.action}`, color: "success" });
-    await refreshGists();
-    await refreshStatus();
-  } catch (e: any) {
-    toast.add({ title: "Toggle failed", description: e?.data?.message || e.message, color: "error" });
-  } finally {
-    toggling.value = null;
-  }
-}
-
-// Auto-refresh every 10 seconds
-let refreshInterval: ReturnType<typeof setInterval>;
-onMounted(() => {
-  refreshInterval = setInterval(() => {
-    refreshGists();
-    refreshStatus();
-  }, 10000);
-});
-onUnmounted(() => clearInterval(refreshInterval));
+const allExpanded = computed(
+  () => chartsData.value && expandedSections.value.size === chartsData.value.length
+);
 </script>
 
 <template>
-  <div class="space-y-6">
-    <div class="flex justify-between items-center">
-      <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
-      <div class="flex gap-2">
-        <UButton @click="syncGists" :loading="syncing" variant="outline">
-          Sync Gists
-        </UButton>
-        <UButton @click="rerunFailed" :loading="rerunningFailed" variant="outline" color="warning" :disabled="!status?.jobs?.failed">
-          Rerun Failed
-        </UButton>
-        <UButton @click="runAll" :loading="runningAll" color="primary">
-          Run All
-        </UButton>
+  <div>
+    <!-- Lightbox -->
+    <div
+      v-if="lightboxSrc"
+      class="fixed inset-0 bg-black/90 flex items-center justify-center z-50 cursor-pointer"
+      @click="lightboxSrc = null"
+    >
+      <img :src="lightboxSrc" class="max-w-[95%] max-h-[95%] object-contain rounded-lg" />
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <!-- Header -->
+      <div class="flex items-center justify-between mb-8">
+        <div>
+          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Additional Charts</h1>
+          <p class="text-sm text-gray-500 mt-1" v-if="chartsData">
+            {{ chartsData.length }} chart sets
+          </p>
+        </div>
+        <button
+          v-if="chartsData && chartsData.length > 0"
+          class="text-sm text-gray-600 hover:text-blue-600 px-3 py-1.5 rounded-lg hover:bg-gray-100 dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-800"
+          @click="toggleAll"
+        >
+          {{ allExpanded ? "Collapse All" : "Expand All" }}
+        </button>
       </div>
-    </div>
 
-    <!-- Config Info -->
-    <div v-if="status" class="flex flex-wrap gap-3 text-xs text-gray-500">
-      <span>GitHub: <strong>{{ status.githubUser }}</strong></span>
-      <span>Prefix: <strong>{{ status.gistPrefix }}*.r</strong></span>
-      <span>Schedule: <strong>{{ status.cronSchedule }}</strong></span>
-      <span>MinIO: <StatusBadge :status="status.minioConfigured ? 'success' : 'failed'" /></span>
-      <span>Claude: <StatusBadge :status="status.claudeConfigured ? 'success' : 'failed'" /></span>
-      <span>GitHub Push: <StatusBadge :status="status.githubTokenConfigured ? 'success' : 'failed'" /></span>
-    </div>
-
-    <!-- Status Cards -->
-    <div v-if="status" class="grid grid-cols-2 md:grid-cols-5 gap-4">
-      <UCard>
-        <div class="text-sm text-gray-500">Active</div>
-        <div class="text-2xl font-bold">{{ status.gists?.active || 0 }}</div>
-      </UCard>
-      <UCard>
-        <div class="text-sm text-gray-500">Disabled</div>
-        <div class="text-2xl font-bold text-gray-400">{{ status.gists?.disabled || 0 }}</div>
-      </UCard>
-      <UCard>
-        <div class="text-sm text-gray-500">Successful</div>
-        <div class="text-2xl font-bold text-green-600">{{ status.jobs?.success || 0 }}</div>
-      </UCard>
-      <UCard>
-        <div class="text-sm text-gray-500">Failed</div>
-        <div class="text-2xl font-bold text-red-600">{{ status.jobs?.failed || 0 }}</div>
-      </UCard>
-      <UCard>
-        <div class="text-sm text-gray-500">Running</div>
-        <div class="text-2xl font-bold text-blue-600">{{ status.jobs?.running || 0 }}</div>
-      </UCard>
-    </div>
-
-    <!-- Active Gists Table -->
-    <UCard>
-      <template #header>
-        <h2 class="text-lg font-semibold">Active Gists</h2>
-      </template>
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="border-b border-gray-200 dark:border-gray-700">
-              <th class="text-left py-2 px-3">Filename</th>
-              <th class="text-left py-2 px-3">Description</th>
-              <th class="text-left py-2 px-3">Status</th>
-              <th class="text-left py-2 px-3">Last Run</th>
-              <th class="text-left py-2 px-3">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="gist in activeGists"
-              :key="gist.id"
-              class="border-b border-gray-100 dark:border-gray-800"
+      <!-- Table of Contents -->
+      <div v-if="chartsData && chartsData.length > 0" class="mb-8">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">Table of Contents</h2>
+        <div class="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden">
+          <div class="divide-y divide-gray-100 dark:divide-gray-800 max-h-64 overflow-y-auto">
+            <a
+              v-for="entry in chartsData"
+              :key="entry.title"
+              :href="`#${sectionId(entry.title)}`"
+              class="flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              @click.prevent="toggleSection(sectionId(entry.title))"
             >
-              <td class="py-2 px-3">
-                <NuxtLink :to="`/gists/${gist.id}`" class="text-blue-600 hover:underline">
-                  {{ gist.filename }}
-                </NuxtLink>
-                <a
-                  :href="gist.htmlUrl"
-                  target="_blank"
-                  class="ml-1 text-gray-400 hover:text-gray-600 text-xs"
-                  title="View on GitHub"
-                >
-                  GH
-                </a>
-              </td>
-              <td class="py-2 px-3 text-gray-500 max-w-xs truncate">
-                {{ gist.description || '-' }}
-              </td>
-              <td class="py-2 px-3">
-                <StatusBadge :status="gist.latestRun?.status || 'never_run'" />
-              </td>
-              <td class="py-2 px-3 text-gray-500">
-                {{ formatDate(gist.latestRun?.finishedAt) }}
-              </td>
-              <td class="py-2 px-3 space-x-1">
-                <UButton
-                  size="xs"
-                  variant="outline"
-                  @click="runGist(gist.id)"
-                  :disabled="gist.latestRun?.status === 'running'"
-                >
-                  Run
-                </UButton>
-                <NuxtLink
-                  v-if="gist.latestRun"
-                  :to="`/gists/${gist.id}`"
-                >
-                  <UButton size="xs" variant="ghost">
-                    Logs
-                  </UButton>
-                </NuxtLink>
-                <UButton
-                  size="xs"
-                  variant="ghost"
-                  color="warning"
-                  :loading="toggling === gist.id"
-                  @click="toggleGist(gist.id)"
-                >
-                  Disable
-                </UButton>
-              </td>
-            </tr>
-          </tbody>
-          <tbody v-if="activeGists.length === 0">
-            <tr>
-              <td colspan="5" class="text-center py-8 text-gray-500">
-                No active gists. Click "Sync Gists" to discover chart gists.
-              </td>
-            </tr>
-          </tbody>
-        </table>
+              <span class="text-gray-900 dark:text-gray-100">{{ entry.title }}</span>
+              <span class="text-xs text-gray-400">{{ entry.charts.length }} chart{{ entry.charts.length !== 1 ? "s" : "" }}</span>
+            </a>
+          </div>
+        </div>
       </div>
-    </UCard>
 
-    <!-- Disabled Gists Table -->
-    <UCard v-if="disabledGists.length > 0">
-      <template #header>
-        <h2 class="text-lg font-semibold text-gray-500">Disabled Gists</h2>
-      </template>
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="border-b border-gray-200 dark:border-gray-700">
-              <th class="text-left py-2 px-3">Filename</th>
-              <th class="text-left py-2 px-3">Description</th>
-              <th class="text-left py-2 px-3">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="gist in disabledGists"
-              :key="gist.id"
-              class="border-b border-gray-100 dark:border-gray-800 opacity-60"
-            >
-              <td class="py-2 px-3">
-                <span class="font-mono text-gray-500">{{ gist.filename }}</span>
-                <a
-                  :href="gist.htmlUrl"
-                  target="_blank"
-                  class="ml-1 text-gray-400 hover:text-gray-600 text-xs"
-                  title="View on GitHub"
-                >
-                  GH
-                </a>
-              </td>
-              <td class="py-2 px-3 text-gray-500 max-w-xs truncate">
-                {{ gist.description || '-' }}
-              </td>
-              <td class="py-2 px-3">
-                <UButton
-                  size="xs"
-                  variant="outline"
-                  color="success"
-                  :loading="toggling === gist.id"
-                  @click="toggleGist(gist.id)"
-                >
-                  Enable
-                </UButton>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- Loading -->
+      <div v-if="!chartsData" class="flex flex-col items-center justify-center py-16">
+        <div class="w-10 h-10 border-3 border-gray-200 border-t-blue-500 rounded-full animate-spin mb-4" />
+        <p class="text-gray-500">Loading charts...</p>
       </div>
-    </UCard>
+
+      <!-- Empty state -->
+      <div v-else-if="chartsData.length === 0" class="text-center py-16 text-gray-500">
+        No charts available yet.
+      </div>
+
+      <!-- Chart Sections -->
+      <div v-else class="space-y-3">
+        <div
+          v-for="entry in chartsData"
+          :key="entry.title"
+          :id="sectionId(entry.title)"
+          class="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden"
+        >
+          <!-- Accordion Header -->
+          <button
+            class="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            @click="toggleSection(sectionId(entry.title))"
+          >
+            <div class="flex-1 min-w-0">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-white truncate">{{ entry.title }}</h3>
+              <div class="flex items-center gap-3 mt-1">
+                <span class="text-sm text-gray-500">{{ entry.charts.length }} chart{{ entry.charts.length !== 1 ? "s" : "" }}</span>
+                <a
+                  :href="entry.url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex items-center text-sm text-gray-400 hover:text-blue-600 transition-colors"
+                  @click.stop
+                >
+                  Source
+                </a>
+              </div>
+            </div>
+            <svg
+              class="w-5 h-5 text-gray-400 flex-shrink-0 ml-4 transition-transform duration-300"
+              :class="{ 'rotate-180': expandedSections.has(sectionId(entry.title)) }"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          <!-- Accordion Content (only render images when expanded) -->
+          <div v-if="expandedSections.has(sectionId(entry.title))" class="px-6 pb-6 space-y-4">
+            <div v-for="chartUrl in entry.charts" :key="chartUrl" class="rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800">
+              <img
+                :src="chartUrl"
+                :alt="entry.title"
+                class="w-full max-w-2xl cursor-pointer rounded-lg hover:scale-[1.02] hover:shadow-lg transition-all duration-200"
+                @click="lightboxSrc = chartUrl"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>

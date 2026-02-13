@@ -52,15 +52,3 @@ export async function uploadPng(
   return objectName;
 }
 
-export async function uploadJson(
-  content: string,
-  objectName: string
-): Promise<void> {
-  const client = getClient();
-  const bucket = getBucket();
-  const buffer = Buffer.from(content);
-  await client.putObject(bucket, objectName, buffer, buffer.length, {
-    "Content-Type": "application/json",
-  });
-  console.log(`[minio] Uploaded: ${objectName}`);
-}

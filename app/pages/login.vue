@@ -20,7 +20,7 @@ async function handleLogin() {
     if (result.error) {
       error.value = result.error.message || "Login failed";
     } else {
-      router.push("/");
+      router.push("/admin");
     }
   } catch (e: any) {
     error.value = e.message || "Login failed";

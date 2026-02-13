@@ -5,7 +5,7 @@ const router = useRouter();
 
 async function handleSignOut() {
   await signOut();
-  router.push("/login");
+  router.push("/");
 }
 </script>
 
@@ -15,14 +15,17 @@ async function handleSignOut() {
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between items-center h-16">
           <div class="flex items-center gap-6">
-            <NuxtLink to="/" class="text-xl font-bold text-gray-900 dark:text-white">
+            <NuxtLink to="/admin" class="text-xl font-bold text-gray-900 dark:text-white">
               Chart Runner
             </NuxtLink>
-            <nav class="flex gap-4" v-if="session?.user">
+            <nav class="flex gap-4">
               <NuxtLink to="/" class="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
+                Charts
+              </NuxtLink>
+              <NuxtLink v-if="session?.user" to="/admin" class="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
                 Dashboard
               </NuxtLink>
-              <NuxtLink to="/jobs" class="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
+              <NuxtLink v-if="session?.user" to="/admin/jobs" class="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
                 Jobs
               </NuxtLink>
             </nav>
