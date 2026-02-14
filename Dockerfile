@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install R packages
-RUN install.r tidyverse data.table jsonlite fable fabletools tsibble ggrepel gridExtra broom
+RUN install.r tidyverse data.table jsonlite fable fabletools tsibble ggrepel gridExtra broom quantmod TTR
 
 # Install Bun
 RUN curl -fsSL https://bun.sh/install | bash
