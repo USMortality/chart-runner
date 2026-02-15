@@ -29,6 +29,16 @@ function toggleSection(id: string) {
   expandedSections.value = new Set(expandedSections.value);
 }
 
+function scrollToSection(id: string) {
+  if (!expandedSections.value.has(id)) {
+    expandedSections.value.add(id);
+    expandedSections.value = new Set(expandedSections.value);
+  }
+  nextTick(() => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+}
+
 function toggleAll() {
   if (!chartsData.value) return;
   const allExpanded = expandedSections.value.size === chartsData.value.length;
@@ -83,7 +93,7 @@ const allExpanded = computed(
               :key="entry.title"
               :href="`#${sectionId(entry.title)}`"
               class="flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-              @click.prevent="toggleSection(sectionId(entry.title))"
+              @click.prevent="scrollToSection(sectionId(entry.title))"
             >
               <span class="text-gray-900 dark:text-gray-100">{{ entry.title }}</span>
               <span class="text-xs text-gray-400">{{ entry.charts.length }} chart{{ entry.charts.length !== 1 ? "s" : "" }}</span>
