@@ -22,8 +22,10 @@ function sectionId(title: string) {
 function toggleSection(id: string) {
   if (expandedSections.value.has(id)) {
     expandedSections.value.delete(id);
+    history.replaceState(null, "", " ");
   } else {
     expandedSections.value.add(id);
+    history.replaceState(null, "", "#" + id);
   }
   // Trigger reactivity
   expandedSections.value = new Set(expandedSections.value);
@@ -34,10 +36,32 @@ function scrollToSection(id: string) {
     expandedSections.value.add(id);
     expandedSections.value = new Set(expandedSections.value);
   }
+  history.replaceState(null, "", "#" + id);
   nextTick(() => {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 }
+
+function navigateToHash(hash: string) {
+  if (!hash || !chartsData.value) return;
+  const id = hash.replace(/^#/, "");
+  const valid = chartsData.value.some((e) => sectionId(e.title) === id);
+  if (valid) {
+    scrollToSection(id);
+  }
+}
+
+onMounted(() => {
+  window.addEventListener("hashchange", () => {
+    navigateToHash(window.location.hash);
+  });
+});
+
+watch(chartsData, (data) => {
+  if (data && window.location.hash) {
+    nextTick(() => navigateToHash(window.location.hash));
+  }
+});
 
 function toggleAll() {
   if (!chartsData.value) return;
@@ -93,7 +117,7 @@ const allExpanded = computed(
               :key="entry.title"
               :href="`#${sectionId(entry.title)}`"
               class="flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-              @click.prevent="scrollToSection(sectionId(entry.title))"
+              @click="scrollToSection(sectionId(entry.title))"
             >
               <span class="text-gray-900 dark:text-gray-100">{{ entry.title }}</span>
               <span class="text-xs text-gray-400">{{ entry.charts.length }} chart{{ entry.charts.length !== 1 ? "s" : "" }}</span>
