@@ -1,6 +1,7 @@
 <script setup lang="ts">
 const { useSession, signOut } = useAuthClient();
-const { data: session } = useSession();
+const sessionState = useSession();
+const session = computed(() => sessionState.value?.data);
 const router = useRouter();
 
 async function handleSignOut() {

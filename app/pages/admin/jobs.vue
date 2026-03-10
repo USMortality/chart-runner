@@ -74,7 +74,7 @@ onUnmounted(() => clearInterval(refreshInterval));
   <div class="space-y-6">
     <div class="flex justify-between items-center">
       <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Job History</h1>
-      <UButton variant="outline" @click="refresh">Refresh</UButton>
+      <UButton variant="outline" @click="() => refresh()">Refresh</UButton>
     </div>
 
     <UCard>

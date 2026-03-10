@@ -35,8 +35,9 @@ ${errorLog}
     ],
   });
 
+  const firstBlock = message.content[0];
   const text =
-    message.content[0].type === "text" ? message.content[0].text : "";
+    firstBlock && firstBlock.type === "text" ? firstBlock.text : "";
 
   // Extract R code block
   const codeMatch = text.match(/```r\n([\s\S]*?)```/);
@@ -44,7 +45,7 @@ ${errorLog}
     throw new Error("Claude did not return a valid R code block");
   }
 
-  const fixedScript = codeMatch[1].trim();
+  const fixedScript = codeMatch[1]!.trim();
 
   // Extract explanation (everything after the code block)
   const explanation = text
